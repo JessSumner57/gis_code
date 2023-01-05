@@ -1,0 +1,337 @@
+
+```{r}
+library(tidyverse)
+library(sf)
+library(tmap)
+library(janitor)
+library(spatstat)
+tflpoints<- read_csv("319JourneyDataExtract25May2022-31May2022.csv", na="") %>% clean_names() 
+
+london <- st_read(here::here("London_Boroughs.gpkg")) %>%
+      st_transform(., crs=4326)
+get_cid_points = function(type) {
+  base_url = "https://cycling.data.tfl.gov.uk/CyclingInfrastructure/data/points/"
+  cid_url = paste0(base_url, type, ".json")
+  sf::read_sf(cid_url)
+}
+
+typesofdata <- collisions %>% 
+  summarise_all(class) %>%
+  pivot_longer(everything(), 
+               names_to="All_variables", 
+               values_to="Variable_class")
+typesofdata
+
+typesofdata[1]
+library(tidyverse)
+library(tmap)
+library(rgdal)
+library(broom)
+library(mapview)
+library(crosstalk)
+library(sf)
+library(sp)
+library(spdep)
+library(car)
+library(fs)
+library(janitor)
+library(here)
+collision_points <- collisions%>%
+   st_as_sf(., coords = c("longitude", "latitude"), 
+                   crs = 4326)
+
+collision_sub <- collision_points[london, , op = st_within]
+
+tmap_mode("plot")
+tm_shape(london) +
+  tm_polygons(col = NA, alpha = 0.5) +
+tm_shape(collision_sub) +
+  tm_dots(col = "blue")
+
+
+points2<- collision_sub%>%
+filter(number_of_casualties >1)%>%
+filter(light_conditions == 1)%>%
+filter(aadf_pedal_cycles > 1000)
+  st_transform(., crs=2908)
+  
+tmap_mode("plot")
+tm_shape(london) +
+  tm_polygons(col = NA, alpha = 0.5) +
+tm_shape(points2) +
+  tm_dots(col = "blue")
+```
+#aadf_pedal cyclists
+```{r}
+points3<- points%>%
+filter(str_detect(SUSPECT_SEX, "MALE")%>%
+filter(OBSERVED_DURATION_MINUTES > 2)%>%
+st_transform(., crs=2908) 
+
+OBSERVED_DURATION_MINUTES
+
+tmap_mode("plot")
+tm_shape(areas) +
+  tm_polygons(col = NA, alpha = 0.5) +
+tm_shape(points3) +
+  tm_dots(col = "blue")
+```
+
+```{r}
+tmap_mode("plot")
+tm_shape(areas) +
+  tm_polygons(col = NA, alpha = 0.5) +
+tm_shape(points) +
+  tm_dots(col = "blue")
+
+points2<- points%>%
+filter(str_detect(SUSPECT_SEX, "FEMALE"))%>%
+  st_transform(., crs=2908)
+  
+tmap_mode("plot")
+tm_shape(areas) +
+  tm_polygons(col = NA, alpha = 0.5) +
+tm_shape(points2) +
+  tm_dots(col = "blue")
+```
+Ran into issues trying to set the crs latitude and longitude. Finally got there. This part is where I just wanted to see how it compares between female and male. To further specify my information for my project.
+
+```{r}
+points3<- points%>%
+filter(str_detect(SUSPECT_SEX, "MALE")%>%
+filter(OBSERVED_DURATION_MINUTES > 2)%>%
+st_transform(., crs=2908) 
+
+OBSERVED_DURATION_MINUTES
+
+tmap_mode("plot")
+tm_shape(areas) +
+  tm_polygons(col = NA, alpha = 0.5) +
+tm_shape(points3) +
+  tm_dots(col = "blue")
+```
+  
+So comparing male versus female, in both I see a large clustering on the NW, where Manhattan in with some more clustering in Brooklyn. Also, just for interest, the different between men and women was for 773 instances involving a female whereas for men it was 8902. Now that I have done some initial mapping, it kinda looks like some of my points might be on the edge or not completley in the boundary. After much back and forth, I decided the best plan of action was to dwindle
+down the observed duration minutes. I did this because if you think
+about a police officer's reasoning for stopping and frisking someone,
+this seems to be something hard to assess if you have observed the
+person for less than 2 minutes, and I feel even that is being generous.
+So, the difference then between people that police observed for a
+'substantial amount of time' and those that were deemed 'friskable' in
+under 2 minutes went from 8902 to 1254! To me, I would imagine other
+factors are at play, such as profiling or the police are not properly
+tracking how long it takes them to assess whether they will frisk
+someone, but I believe it is more of the former.
+Let's check this out. 
+
+```{r}
+areas <- areas%>%
+  st_transform(., crs=2908)
+
+points_sub <- points[areas,]
+```
+
+Here I have subsetted my points to make sure they are within the boundary. It looks like 7 points were out of the boundary, so that cleared up any sort of data I wasn't interested in. 
+
+
+
+```{r}
+areas_projected <- areas %>%
+  st_transform(., 6538)
+
+points3_projected <- points3 %>%
+  st_transform(., 6538)
+
+
+window <- as.owin(areas_projected)
+plot(window)
+```
+I have plotted my window to start conducting some point pattern analysis. Great! in metres
+Now I will create an sp object so that I can beging seeing whether clustering is happening through ppp. 
+
+```{r}
+points3_sp<- points3_projected %>%
+  as(., 'Spatial')
+#create a ppp object
+points3_sp.ppp <- ppp(x=points3_sp@coords[,1],
+                      y=points3_sp@coords[,2],
+                      window=window)
+```
+
+It looks like even my subsetting didn't take care of all the points because I got a message that there were some alying outside the specified window. Well clearly there is some sharp clustering specifically at 3000 and we can see a sharp increase at 1000 when I assessed this first without looking at length of time in filtering out my data. 
+```{r}
+unique(points3)
+K <- points3_sp.ppp %>%
+  Kest(., correction="border") %>%
+  plot()
+points3 %>% distinct()
+
+library(sp)
+
+#first extract the points from the spatial points data frame
+points_todf <- points3_sp %>%
+  coordinates(.)%>%
+  as.data.frame()
+#now I will run the dbscan analysis
+points_todf_DBSCAN <- points_todf %>%
+  fpc::dbscan(.,eps = 3000, MinPts = 1000)
+
+points_todf%>%
+  dbscan::kNNdistplot(.,k=100)
+plot(points_todf_DBSCAN, points_todf, main = "DBSCAN Output", frame = F)
+plot(areas$geometry, add=T)
+
+```
+I want to cancel out the noise so now I will do hbscan. The benefits of
+using hdbscan here is that the size of New York, and its specific
+boroughs are a bit abnormal, so hdbscan can take into account arbitrary
+shapes. Also, from both analyzing my Ripley's K and DBASCAN there are
+clusters of different sizes, which hdbscan does quite well. Also, it is
+not constrained by a distance requirement.
+
+```{r}
+library(dbscan)
+
+hdb <- hdbscan(points_todf ,minPts = 1000)
+plot(points3, col = hdb$cluster + 1L, cex = .5)
+plot(areas$geometry, add=T)
+```
+
+#I want to further subset this to have to do with manhattan because that's where there seems to be a lot of points
+
+```{r}
+
+points4<- points%>% 
+  filter(str_detect(stop_location_boro_name, "MANHATTAN"))%>%
+  st_transform(., crs=2908)
+
+points4_sp<- points4 %>%
+  as(., 'Spatial')
+```
+
+I then created a ppp object so that I can conduct dbscan
+```{r}
+points4_sp.ppp <- ppp(x=points4_sp@coords[,1],
+                      y=points4_sp@coords[,2],
+                      window=window)
+```
+
+It looks like even my subsetting didn't take care of all the points because I got a message that there were some alying outside the specified window. 
+```{r}
+unique(points3)
+K <- points3_sp.ppp %>%
+  Kest(., correction="border") %>%
+  plot()
+```
+
+#This time we actually see that the value of k falls below the line at around 3200.
+```{r}
+stattest<- quadrat.test(points4_sp.ppp, nx = 100, ny=100)
+
+stattest
+```
+
+I want to do a chi-squared test to determine if the pvalue is > .05 to determine whether we have CSR and that there is no pattern in our points or if it is <.05 to say we have clustering. I want to look at kernel density estimation for my ppp.
+```{r}
+points3_sp.ppp %>%
+  density(., sigma=2000) %>%
+  plot()
+
+```
+
+```{r}
+plot(points3.ppp,
+     pch=16,
+     cex=0.5, 
+     main="plotting")
+points3.ppp %>%
+  quadratcount(.,nx = 20, ny = 20)%>%
+    plot(., add=T, col="red")
+```
+
+#stattest 
+I want to do a chi-squared test to determine if the pvalue is > .05 to determine whether we have CSR and that there is no pattern in my points or if it is <.05 to say we have clustering. I want to look
+at kernel density estimation for my ppp.
+#Why did I chose kernel density? I felt that
+this showed me and confirmed my suspiciouns quite simply that Manhattan
+and Brooklyn experience that largets amount of frisking. It also
+confirmed to me that Manhattan exhibited the most amount of clustering.
+```{r}
+points3_sp.ppp %>% density(.,
+sigma=2000) %>% plot()
+plot(points3.ppp, #pch=16, #cex=0.5,
+main="plotting")
+```
+
+I attempted quadrant analysis just to see precise numbers
+but there is too much data and it is not particularly useful in this
+analysis because we have too many variables, too large of a dataset. This isn't like the Cholera map at all! 
+  ```{r}
+points3.ppp %>% 
+  quadratcount(.,nx = 20, ny = 20)%>% 
+  plot(., add=T,
+       col="red")
+```
+
+
+```{r}
+teststats<- quadrat.test(points3_sp.ppp, nx = 10, ny = 10)
+teststats
+```
+
+#Chi-square
+Here, we see the p-value is 2.2 e-16. This means
+that we can cofirms we have complete spatial randomness and that there
+is no pattern to our points. I now want to move onto plotting. This is
+important, that we confirm complete spatial randomness because it means
+that assessing point pattern analysis is a viable option.
+
+
+
+```{r}
+ggplot(points3, aes(DAY2, STOP_FRISK_TIME, color = DAY2)) +\
+geom_boxplot(fill = "#0099f8")+ labs( title = "Frequency of time and day
+of SQF's", subtitle = "Made by Jessica Sumner", x = "Day of the Week", y
+                                      = "Time of Day") scale_color_manual(values = c("#0099f8", "#e74c3c",
+                                                                                     "#2ecc71"))
+
+```
+
+```{r}
+ggplot(points3, aes(DAY2, OBSERVED_DURATION_MINUTES, color = DAY2)) +\
+geom_boxplot(fill = "#0099f8")+ labs( title = "Frequency of time and day
+of SQF's", subtitle = "Made by Jessica Sumner", x = "Day of the Week", y
+                                      = "Observed Duration Minutes") scale_color_manual(values = c("#0099f8",
+                                                                                                   "#e74c3c", "#2ecc71"))
+
+```
+
+#Box Plot
+what time of day would these SFQ's happen. Beyond what I expected, it
+seems that on Tuesday and Wednesday, the SFQ's happen later on in the
+day whereas Saturday, Friday, and Sunday it seems to not happen as late
+as I would have expected. The only one that sort of meets my expectation
+is that on Monday it happens earlier on in the day. Because I have
+assessed my initial project question of is there spatial randomness in
+police frisking of New York in 2021, I now have furthered this analysis
+on whether or not there is randomness to the time and day. I also added
+different colors so that the box and whisker plot could read more
+easily. Because I had eliminated many almost 70% of my data with
+assessing how many data points included SFQ's that are over two minutes,
+I wanted to further assess if there were outliers within this. I would
+deduce that perhaps there is a pattern between day and time, and if I
+was focusing on spatial autocorrelation, I could have done this to see
+how it changes over space and time. So, for example, perhaps in areas
+that officers deemed "rougher", they are more likely to SFQ people
+quicker, because they assume that they are more likely to commit crime.
+However, since I went forward with point pattenr analysis, that
+assessment is beyond the scope
+
+#Interpretation
+After going through this data, utilizing techniques of Ripley's K, DBSCAN, HDBSCAN, and plotting on a box and whisker plot, along with conduct a chi square test, I was able to determine there is clustering in two main areas of New York, Manhattan and Brooklyn, meaning there is an observable pattern.To further assess these results, I utilized the Poisson Distribution to see the probability of a police officer SFQing, a male, after observing them for two minutes, over the space of NYC. This is important, because these results could possibly shed light on a bias of police officers to air on the side of stopping and frisking in areas of Manhattan and Brookly.Furthermore, if I wanted to conduct spatial auto correlation on this data, meaning that there is fixed space, with the values of spatial units varying, and where values are similar meaning they exhibit spatial autocorrelation, I would have chosen something like type of crime perhaps, like break ins or theft, as this variable would allow me to assess if areas people are more likely to steal from, just as an example.. I didn't have time to determine if high values are near high values and low values near low values, but from my kernel density, I can vaguely assess that there is certain areas that are near other high values in Manhattan, however, I havent had the time to fully assess. Doing analysis like this is crucial for policy makers, and occupants of a city, or city dwellers. Data scientists can use this information for citizen justice purposes, as discussed by Kauffman et al. ("Predictive policing and the politics of patterns," 2018). By first assessing clustering, people who want to work towards justice-centred causes are able to see what areas can be targeted, and thus, ensuring that policies are working for the right communities. Of course, I understnad that my research lacks full depth to be able to enact such policies, but it is a starting point. 
+
+
+#bibliography
+
+The NYPD is still stopping and frisking Black people at disproportionate rates. (2021, June 10). The Intercept. https://theintercept.com/2021/06/10/stop-and-frisk-new-york-police-racial-disparity/
+Predictive policing and the politics of patterns. (2018, December 7). OUP Academic. https://academic.oup.com/bjc/article/59/3/674/5233371
